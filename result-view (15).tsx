@@ -842,6 +842,37 @@ export function ResultView({
   // detect if the doctor changed anything before clicking Save
   const [aiSnapshot, setAiSnapshot] = useState<Record<string, string> | null>(null);
 
+  // Update snapshot with AI amounts once financial summary calculates them
+  // Uses a ref to avoid re-render loop
+  const snapshotAmountsSet = useRef(false);
+  useEffect(() => {
+    if (!aiSnapshot || snapshotAmountsSet.current) return;
+    if (!claimCalculation && !displayAnalysis) return;
+
+    const approvedAmt = claimCalculation?.finalInsurerPayable
+      ?? claimCalculation?.insurerPayable
+      ?? displayAnalysis?.finalInsurerPayable
+      ?? 0;
+    const billedAmt = claimCalculation?.hospitalBillAfterDiscount
+      ?? claimCalculation?.hospitalBillBeforeDiscount
+      ?? (displayAnalysis?.totalAmount as {value?: number} | undefined)?.value
+      ?? 0;
+    const tariffAmt = (displayAnalysis?.tariffExtractionItem as Array<{amount?: number}> | undefined)
+      ?.reduce((s, i) => s + (i.amount ?? 0), 0) ?? 0;
+
+    if (approvedAmt > 0 || billedAmt > 0) {
+      snapshotAmountsSet.current = true;
+      setAiSnapshot(prev => prev ? {
+        ...prev,
+        "Approved Amount":      approvedAmt > 0 ? String(approvedAmt) : "",
+        "Hospital Bill Amount": billedAmt   > 0 ? String(billedAmt)   : "",
+        "Tariff Amount":        tariffAmt   > 0 ? String(tariffAmt)   : "",
+        "Approved Accommodation": selectedApprovedId ?? "",
+        "Availed Accommodation":  selectedAvailedId  ?? "",
+      } : prev);
+    }
+  }, [claimCalculation, displayAnalysis, aiSnapshot, selectedApprovedId, selectedAvailedId]);
+
   // Financial Summary Calculations
   const financialSummaryTotals = useMemo(() => {
     if (!claimCalculation) {
@@ -988,16 +1019,19 @@ export function ResultView({
       setPresentingComplaint(admissibility.presentingComplaint);
     }
 
-    // Capture AI snapshot when analysis first loads — used for change detection on Save
+    // Capture AI snapshot when analysis first loads — only editable fields tracked
     if (displayAnalysis && !aiSnapshot) {
       const snap: Record<string, string> = {};
       const admiss = displayAnalysis?.medicalAdmissibility as Record<string, unknown> | null | undefined;
+      // Only fields the doctor can edit inside the iframe
       snap["Presenting Complaint"] = (admiss?.presentingComplaint as string) ?? "";
-      snap["Diagnosis"]            = (admiss?.diagnosis           as string) ?? "";
-      snap["Line of Treatment"]    = (admiss?.lineOfTreatment     as string) ?? "";
-      snap["Processing Remarks"]   = (displayAnalysis as Record<string, unknown>)?.processingRemarks as string ?? "";
-      snap["Doctor Notes"]         = (displayAnalysis as Record<string, unknown>)?.doctorNotes       as string ?? "";
-      // Amounts will be added when financial summary loads
+      snap["Processing Remarks"]   = "";  // starts empty — doctor fills it in
+      snap["Doctor Notes"]         = "";  // starts empty — doctor fills it in
+      snap["Hospital Bill Amount"] = "";  // set when financial summary loads
+      snap["Tariff Amount"]        = "";  // set when financial summary loads
+      snap["Approved Amount"]      = "";  // set when financial summary loads
+      snap["Approved Accommodation"] = ""; // set from spectraFields
+      snap["Availed Accommodation"]  = ""; // set from spectraFields
       setAiSnapshot(snap);
     }
   }, [displayAnalysis]);
@@ -1431,25 +1465,24 @@ export function ResultView({
       // Wait for Spectra to process all preceding postMessages before firing claimAISaveComplete
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      // ── METRICS: Compare AI snapshot vs current values — detect doctor changes ──
+      // ── METRICS: Compare AI snapshot vs current editable field values ──────────
+      // Only tracks fields the doctor can actually edit inside the iframe
       const changedFields: Array<{ field: string; aiValue: string; userValue: string }> = [];
       if (aiSnapshot) {
         const currentValues: Record<string, string> = {
-          "Presenting Complaint": presentingComplaint.trim(),
-          "Diagnosis":            diagnosis            ?? "",
-          "Line of Treatment":    lineOfTreatment      ?? "",
-          "Processing Remarks":   processingRemarks.trim(),
-          "Doctor Notes":         doctorNotes.trim(),
-          "Hospital Bill Amount": String(editedAmounts.claimed ?? ""),
-          "Tariff Amount":        String(editedAmounts.tariff  ?? ""),
-          "Approved Amount":      String(editedAmounts.approved ?? ""),
+          "Presenting Complaint":   presentingComplaint.trim(),
+          "Processing Remarks":     processingRemarks.trim(),
+          "Doctor Notes":           doctorNotes.trim(),
+          "Hospital Bill Amount":   editedAmounts.claimed  != null ? String(editedAmounts.claimed)  : "",
+          "Tariff Amount":          editedAmounts.tariff   != null ? String(editedAmounts.tariff)   : "",
+          "Approved Amount":        editedAmounts.approved != null ? String(editedAmounts.approved) : "",
           "Approved Accommodation": selectedApprovedId ?? "",
           "Availed Accommodation":  selectedAvailedId  ?? "",
         };
         Object.entries(currentValues).forEach(([field, currVal]) => {
           const aiVal = (aiSnapshot[field] ?? "").toString().trim();
           const curr  = (currVal ?? "").toString().trim();
-          // Only log if AI had a value AND doctor changed it
+          // Only log if AI had a value AND doctor changed it to something different
           if (aiVal && curr && aiVal !== curr) {
             changedFields.push({ field, aiValue: aiVal, userValue: curr });
           }
