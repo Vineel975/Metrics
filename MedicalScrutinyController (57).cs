@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Web;
@@ -8067,61 +8067,6 @@ namespace Enrollment.Controllers
         /// Called by ClaimAI staging webhook during background processing.
         /// </summary>
         [HttpGet]
-        [AllowAnonymous]
-        [OverrideAuthorization]
-        /// <summary>
-        /// Logs ClaimAI events — save button clicks and field changes.
-        /// Called via fire-and-forget AJAX from Index.cshtml.
-        /// EventType: 'SAVE_CLICK' | 'FIELD_CHANGE'
-        /// </summary>
-        [HttpPost]
-        public ActionResult LogClaimAIEvent(
-            string claimId,
-            string slNo       = "1",
-            string eventType  = "SAVE_CLICK",
-            string fieldName  = null,
-            string aiValue    = null,
-            string userValue  = null,
-            string claimType  = null)
-        {
-            try
-            {
-                // Get current logged-in user details
-                var userID   = Session[SessionValue.UserID]   != null ? Convert.ToInt64(Session[SessionValue.UserID])   : (long?)null;
-                var userName = Session[SessionValue.UserName] != null ? Session[SessionValue.UserName].ToString()        : null;
-                var ipAddress = Request.UserHostAddress;
-
-                using (var conn = new System.Data.SqlClient.SqlConnection(
-                    System.Configuration.ConfigurationManager.ConnectionStrings["SpectraDBConnection"].ConnectionString))
-                {
-                    conn.Open();
-                    using (var cmd = new System.Data.SqlClient.SqlCommand("USP_ClaimAI_LogEvent", conn))
-                    {
-                        cmd.CommandType = System.Data.CommandType.StoredProcedure;
-                        cmd.Parameters.AddWithValue("@ClaimID",   Convert.ToInt64(claimId));
-                        cmd.Parameters.AddWithValue("@SlNo",      Convert.ToInt32(slNo));
-                        cmd.Parameters.AddWithValue("@EventType", eventType);
-                        cmd.Parameters.AddWithValue("@FieldName", (object)fieldName ?? DBNull.Value);
-                        cmd.Parameters.AddWithValue("@AIValue",   (object)aiValue   ?? DBNull.Value);
-                        cmd.Parameters.AddWithValue("@UserValue", (object)userValue ?? DBNull.Value);
-                        cmd.Parameters.AddWithValue("@ClaimType", (object)claimType ?? DBNull.Value);
-                        cmd.Parameters.AddWithValue("@UserID",    (object)userID    ?? DBNull.Value);
-                        cmd.Parameters.AddWithValue("@UserName",  (object)userName  ?? DBNull.Value);
-                        cmd.Parameters.AddWithValue("@IPAddress", (object)ipAddress ?? DBNull.Value);
-                        cmd.ExecuteNonQuery();
-                    }
-                }
-
-                return Json(new { success = true }, JsonRequestBehavior.AllowGet);
-            }
-            catch (Exception ex)
-            {
-                // Non-critical — log silently, don't break the save flow
-                System.Diagnostics.Debug.WriteLine("[ClaimAI] LogClaimAIEvent error: " + ex.Message);
-                return Json(new { success = false, error = ex.Message }, JsonRequestBehavior.AllowGet);
-            }
-        }
-
         public ActionResult GetDocumentsForStaging(string claimId, string slNo = "1")
         {
             try
