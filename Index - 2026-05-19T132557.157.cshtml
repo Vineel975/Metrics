@@ -1,4 +1,4 @@
-﻿@{
+@{
     ViewBag.TitleDepartment = "Claims";
     ViewBag.Title = "Claim";
     Layout = "~/Views/Shared/_Layout.cshtml";
@@ -9016,14 +9016,6 @@
                     var icdSlots             = event.data.icdSlots             || [];
                     var eligibleAmount       = event.data.eligibleAmount       || 0;
 
-                    // ── METRICS: Capture AI-populated clinical values as snapshot ──────
-                    window._claimAI_snapshot = window._claimAI_snapshot || {};
-                    window._claimAI_snapshot.diagnosis           = diagnosis;
-                    window._claimAI_snapshot.lineOfTreatment     = lineOfTreatment;
-                    window._claimAI_snapshot.presentingComplaint = presentingComplaint;
-                    window._claimAI_snapshot.processingRemarks   = event.data.processingRemarks || '';
-                    window._claimAI_snapshot.eligibleAmount      = eligibleAmount;
-                    console.log('[ClaimAI Metrics] Clinical snapshot captured');
 
                     // Probable Diagnosis → txtProbableDiagnosis (always populate)
                     if (diagnosis) {
@@ -9272,14 +9264,6 @@
                     var claimID2           = $('#hdnClaimID').val();
                     var slNo2              = $('#hdnClaimSlNo').val();
 
-                    // ── METRICS: Capture AI billing values as snapshot ─────────────────
-                    window._claimAI_snapshot = window._claimAI_snapshot || {};
-                    window._claimAI_snapshot.hospitalBillAmount  = hospBillAmt;
-                    window._claimAI_snapshot.tariffAmount        = tariffBillAmt;
-                    window._claimAI_snapshot.totalAmountApproved = totalAmtApproved;
-                    window._claimAI_snapshot.approvedAccommodation = $('#ddlApprovedAccommodation').val() || '';
-                    window._claimAI_snapshot.availedAccommodation  = $('#ddlAvailedAccommodation').val()  || '';
-                    console.log('[ClaimAI Metrics] Billing snapshot captured');
 
                     $.ajax({
                         url:  '@Url.Action("SaveBillingForClaimAI", "MedicalScrutiny")',
@@ -9361,12 +9345,12 @@
                 if (event.data.type === 'claimAISaveComplete') {
                     var savedJobId = event.data.jobId || '';
 
-                    // ── METRICS: Log save click + detect field changes ─────────────────
+                    // ── METRICS: Log save click + field changes detected in iframe ──────
                     (function() {
-                        var _cid  = $('#hdnClaimID').val()  || '';
-                        var _slno = $('#hdnClaimSlNo').val() || '1';
-                        var _ct   = window._claimAI_claimType || 'other';
-                        var _snap = window._claimAI_snapshot  || {};
+                        var _cid          = $('#hdnClaimID').val()  || '';
+                        var _slno         = $('#hdnClaimSlNo').val() || '1';
+                        var _ct           = window._claimAI_claimType || 'other';
+                        var _changedFields = event.data.changedFields || []; // from ClaimAI iframe
 
                         function _logEvent(eventType, fieldName, aiVal, userVal) {
                             $.ajax({
@@ -9376,9 +9360,9 @@
                                     claimId:   _cid,
                                     slNo:      _slno,
                                     eventType: eventType,
-                                    fieldName: fieldName  || '',
-                                    aiValue:   aiVal      || '',
-                                    userValue: userVal    || '',
+                                    fieldName: fieldName || '',
+                                    aiValue:   aiVal     || '',
+                                    userValue: userVal   || '',
                                     claimType: _ct
                                 },
                                 error: function() { /* non-critical — silent */ }
@@ -9388,62 +9372,15 @@
                         // 1. Log the save click
                         _logEvent('SAVE_CLICK', null, null, null);
 
-                        // 2. Compare snapshot vs current field values — log changes
-                        var checks = [
-                            {
-                                field:   'Probable Diagnosis',
-                                aiVal:   _snap.diagnosis || '',
-                                currVal: $('#txtProbableDiagnosis').val() || ''
-                            },
-                            {
-                                field:   'Line of Treatment',
-                                aiVal:   _snap.lineOfTreatment || '',
-                                currVal: $('#txtProbableLineOfTreatment').val() || ''
-                            },
-                            {
-                                field:   'Presenting Complaint',
-                                aiVal:   _snap.presentingComplaint || '',
-                                currVal: $('#txtPresentComplaint').val() || ''
-                            },
-                            {
-                                field:   'Processing Remarks',
-                                aiVal:   _snap.processingRemarks || '',
-                                currVal: $('#txtExecutiveNotes').val() || ''
-                            },
-                            {
-                                field:   'Hospital Bill Amount',
-                                aiVal:   String(_snap.hospitalBillAmount  || ''),
-                                currVal: String($('#txtHospitalBillAmount').val() || '')
-                            },
-                            {
-                                field:   'Total Amount Approved',
-                                aiVal:   String(_snap.totalAmountApproved || ''),
-                                currVal: String($('#txtTotalAmountApproved').val() || '')
-                            },
-                            {
-                                field:   'Availed Accommodation',
-                                aiVal:   _snap.availedAccommodation || '',
-                                currVal: $('#ddlAvailedAccommodation').val() || ''
-                            },
-                            {
-                                field:   'Approved Accommodation',
-                                aiVal:   _snap.approvedAccommodation || '',
-                                currVal: $('#ddlApprovedAccommodation').val() || ''
-                            },
-                        ];
-
-                        checks.forEach(function(c) {
-                            var ai   = (c.aiVal   || '').toString().trim();
-                            var curr = (c.currVal || '').toString().trim();
-                            if (ai && curr && ai !== curr) {
-                                _logEvent('FIELD_CHANGE', c.field, ai, curr);
-                                console.log('[ClaimAI Metrics] Field changed — ' + c.field + ': "' + ai + '" → "' + curr + '"');
-                            }
-                        });
-
-                        // Clear snapshot after logging
-                        window._claimAI_snapshot = {};
-                        console.log('[ClaimAI Metrics] Save logged for claim ' + _cid);
+                        // 2. Log each field the doctor changed inside the iframe
+                        if (_changedFields.length > 0) {
+                            _changedFields.forEach(function(c) {
+                                _logEvent('FIELD_CHANGE', c.field, c.aiValue, c.userValue);
+                                console.log('[ClaimAI Metrics] Field changed — ' + c.field + ': "' + c.aiValue + '" → "' + c.userValue + '"');
+                            });
+                        } else {
+                            console.log('[ClaimAI Metrics] No field changes detected for claim ' + _cid);
+                        }
                     })();
                     // ── END METRICS ───────────────────────────────────────────────────
 
@@ -9575,13 +9512,6 @@
                     var icdSlots2      = event.data.icdSlots      || [];
                     var procedureHint2 = (event.data.procedureHint || '').toLowerCase();
 
-                    // ── METRICS: Capture AI ICD + procedure values ─────────────────────
-                    window._claimAI_snapshot = window._claimAI_snapshot || {};
-                    window._claimAI_snapshot.icdSlots     = JSON.stringify(icdSlots2);
-                    window._claimAI_snapshot.procedureHint = procedureHint2;
-                    window._claimAI_snapshot.eligibleAmount  = event.data.eligibleAmount  || window._claimAI_snapshot.eligibleAmount || 0;
-                    window._claimAI_snapshot.packageAmount   = event.data.packageAmount   || 0;
-                    console.log('[ClaimAI Metrics] ICD snapshot captured');
                     var eligibleAmt2   = event.data.eligibleAmount  || 0;
                     var packageAmt2    = event.data.packageAmount   || 0;
 
