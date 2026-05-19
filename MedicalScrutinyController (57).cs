@@ -10523,7 +10523,7 @@ namespace Enrollment.Controllers
                 var slNoInt     = string.IsNullOrEmpty(slNo) ? 1 : Convert.ToInt32(slNo);
 
                 using (var conn = new System.Data.SqlClient.SqlConnection(
-                    System.Configuration.ConfigurationManager.ConnectionStrings["SpectraDBContext"].ConnectionString))
+                    System.Configuration.ConfigurationManager.ConnectionStrings["McarePlusEntities"].ConnectionString))
                 {
                     conn.Open();
 
