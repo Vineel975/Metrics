@@ -864,14 +864,20 @@ export function ResultView({
       snapshotAmountsSet.current = true;
       setAiSnapshot(prev => prev ? {
         ...prev,
-        "Approved Amount":      approvedAmt > 0 ? String(approvedAmt) : "",
-        "Hospital Bill Amount": billedAmt   > 0 ? String(billedAmt)   : "",
-        "Tariff Amount":        tariffAmt   > 0 ? String(tariffAmt)   : "",
+        "Approved Amount":        approvedAmt > 0 ? String(approvedAmt) : "",
+        "Hospital Bill Amount":   billedAmt   > 0 ? String(billedAmt)   : "",
+        "Tariff Amount":          tariffAmt   > 0 ? String(tariffAmt)   : "",
         "Approved Accommodation": selectedApprovedId ?? "",
         "Availed Accommodation":  selectedAvailedId  ?? "",
+        // Capture initial text field values at the moment amounts load
+        // This is the correct "AI value" — what was there before doctor touched anything
+        "Processing Remarks": processingRemarks.trim(),
+        "Doctor Notes":       doctorNotes.trim(),
       } : prev);
     }
   }, [claimCalculation, displayAnalysis, aiSnapshot, selectedApprovedId, selectedAvailedId]);
+  // Note: processingRemarks/doctorNotes not in deps — snapshotAmountsSet.current
+  // ensures this only runs once so we capture their initial AI-loaded values correctly
 
   // Financial Summary Calculations
   const financialSummaryTotals = useMemo(() => {
@@ -1482,9 +1488,19 @@ export function ResultView({
         Object.entries(currentValues).forEach(([field, currVal]) => {
           const aiVal = (aiSnapshot[field] ?? "").toString().trim();
           const curr  = (currVal ?? "").toString().trim();
-          // Only log if AI had a value AND doctor changed it to something different
-          if (aiVal && curr && aiVal !== curr) {
-            changedFields.push({ field, aiValue: aiVal, userValue: curr });
+
+          // For text fields (Remarks, Notes): log if doctor typed anything different
+          // from what was there when AI loaded (even if AI value was empty)
+          const isTextField = field === "Processing Remarks" || field === "Doctor Notes";
+          if (isTextField) {
+            if (curr && curr !== aiVal) {
+              changedFields.push({ field, aiValue: aiVal || "(empty)", userValue: curr });
+            }
+          } else {
+            // For numeric/dropdown fields: only log if AI had a value AND doctor changed it
+            if (aiVal && curr && aiVal !== curr) {
+              changedFields.push({ field, aiValue: aiVal, userValue: curr });
+            }
           }
         });
       }
