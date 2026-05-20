@@ -1,0 +1,32 @@
+Duplicate keys:
+
+ANZCorpIDs
+SBIPolicyNo
+MenuId
+BulkClaimIDUpdationPath
+MaxProviderBulkUpdation
+WebShareURL
+S3SpectraBucketName
+S3FaxserverBucketName
+
+DMS API:
+
+Enviroment
+DMSApiURL
+ClientID
+DMSAPIKey
+URLEncryptionKey
+DMSDirectoryName
+ClaimAIUrl
+
+
+s3 access:
+
+ProviderDocbucketname
+ProviderTariffDocumentPath
+ProviderTariffDocumentPathWebShare
+S3SpectraBucketName
+S3FaxserverBucketName
+ProviderDocaccesskey - missing
+ProviderDocsecretkey - missing
+
